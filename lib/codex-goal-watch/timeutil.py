@@ -21,4 +21,6 @@ candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
 # past time means the next occurrence, preventing stale-scrollback actions.
 if candidate < now and (now - candidate).total_seconds() > 6 * 3600:
     candidate += dt.timedelta(days=1)
+elif candidate > now and (candidate - now).total_seconds() > 12 * 3600:
+    candidate -= dt.timedelta(days=1)
 print(int(candidate.timestamp()))

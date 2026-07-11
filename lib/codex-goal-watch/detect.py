@@ -23,18 +23,20 @@ limit = bool(re.search(r"(?:you(?:'|’)ve hit your usage limit|usage limit reac
 goal = bool(re.search(r"goal hit usage limits\s*\(/goal resume\)", joined, re.I))
 complete = bool(re.search(r"goal (?:complete|completed)", joined, re.I))
 replace = all(x in joined for x in ("Replace goal?", "1. Replace current goal", "2. Cancel"))
-times = re.findall(r"try again at\s+((?:1[0-2]|0?[1-9]):[0-5][0-9]\s*(?:AM|PM|am|pm)|(?:[01]?\d|2[0-3]):[0-5][0-9])", joined)
+times = re.findall(r"try\s+again\s+at\s+((?:1[0-2]|0?[1-9]):[0-5][0-9]\s*(?:AM|PM|am|pm)|(?:[01]?\d|2[0-3]):[0-5][0-9])", joined)
 reset = times[-1] if times else ""
 composer = "UNCERTAIN"
 for line in reversed(visible[-10:]):
     if not line.strip():
+        continue
+    if re.search(r"goal hit usage limits\s*\(/goal resume\)", line, re.I):
         continue
     # Valid prompt glyphs plus a known mojibake rendering. Nothing broader is trusted.
     m = re.fullmatch(r"\s*(?:›|>|:|\u00e2\u20ac\u00ba)\s?(.*)", line)
     if not m:
         break
     value = m.group(1).strip()
-    if not value:
+    if not value or value in {"Find and fix a bug in @filename", "Ask anything"}:
         composer = "EMPTY"
     elif re.fullmatch(r"/goal resume(?:\s+\[Pasted Content [0-9]+ chars\])?", value):
         composer = "RESUME_VISIBLE"

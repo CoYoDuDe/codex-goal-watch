@@ -42,6 +42,16 @@ run_cgw() { run "$REPO/bin/codex-goal-watch" "$@"; }
   run python3 "$CGW_LIB/timeutil.py" '25:99' UTC "$CGW_NOW"; [ "$status" -ne 0 ]
 }
 
+@test "wrapped reset and documented empty placeholder become a safe candidate" {
+  run bash -c "python3 '$CGW_LIB/detect.py' < '$MOCK_FIXTURES/ready-wrapped-placeholder'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'RESET_TEXT=11:36 PM'* ]]
+  [[ "$output" == *'COMPOSER=EMPTY'* ]]
+  run python3 "$CGW_LIB/timeutil.py" '11:36 PM' UTC 1767226200
+  [ "$status" -eq 0 ]
+  [ "$output" -lt 1767226200 ]
+}
+
 @test "add enables multiple sessions and disable is session-specific" {
   run_cgw add alpha auto --priority 100; [ "$status" -eq 0 ]
   run_cgw add beta 0 --priority 50; [ "$status" -eq 0 ]
