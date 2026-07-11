@@ -8,7 +8,38 @@ from zoneinfo import ZoneInfo
 
 raw, tz_name, now_raw = sys.argv[1:]
 now = dt.datetime.fromtimestamp(int(now_raw), ZoneInfo(tz_name))
-m = re.fullmatch(r"\s*(?:(1[0-2]|0?[1-9]):([0-5][0-9])\s*([AaPp][Mm])|([01]?\d|2[0-3]):([0-5][0-9]))\s*", raw)
+zone = ZoneInfo(tz_name)
+raw = " ".join(raw.split())
+
+# Explicit dates always win over the daily rollover heuristic. These formats
+# cover Codex's customary English display plus ISO and European server views.
+for fmt in (
+    "%d.%m.%Y %H:%M", "%d.%m.%Y %I:%M %p",
+    "%Y-%m-%d %H:%M", "%Y-%m-%d %I:%M %p",
+    "%b %d, %Y %I:%M %p", "%B %d, %Y %I:%M %p",
+    "%b %d, %Y %H:%M", "%B %d, %Y %H:%M",
+):
+    try:
+        explicit = dt.datetime.strptime(raw, fmt).replace(tzinfo=zone)
+    except ValueError:
+        continue
+    print(int(explicit.timestamp()))
+    raise SystemExit(0)
+
+# Month/day forms without a year are unambiguous only relative to the current
+# year; a past value is the next annual occurrence.
+for fmt in ("%b %d %I:%M %p", "%B %d %I:%M %p", "%b %d %H:%M", "%B %d %H:%M"):
+    try:
+        partial = dt.datetime.strptime(raw, fmt)
+    except ValueError:
+        continue
+    explicit = partial.replace(year=now.year, tzinfo=zone)
+    if explicit < now:
+        explicit = explicit.replace(year=now.year + 1)
+    print(int(explicit.timestamp()))
+    raise SystemExit(0)
+
+m = re.fullmatch(r"(?:(1[0-2]|0?[1-9]):([0-5][0-9])\s*([AaPp][Mm])|([01]?\d|2[0-3]):([0-5][0-9]))", raw)
 if not m:
     raise SystemExit(2)
 if m.group(1):

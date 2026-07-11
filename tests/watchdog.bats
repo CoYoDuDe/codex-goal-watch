@@ -52,6 +52,15 @@ run_cgw() { run "$REPO/bin/codex-goal-watch" "$@"; }
   [ "$output" -lt 1767226200 ]
 }
 
+@test "explicit European dates are retained and parsed without daily rollover" {
+  run bash -c "python3 '$CGW_LIB/detect.py' < '$MOCK_FIXTURES/ready-explicit-date'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'RESET_TEXT=18.07.2026 08:31'* ]]
+  run python3 "$CGW_LIB/timeutil.py" '18.07.2026 08:31' Europe/Berlin "$CGW_NOW"
+  [ "$status" -eq 0 ]
+  [ "$output" -gt "$CGW_NOW" ]
+}
+
 @test "add enables multiple sessions and disable is session-specific" {
   run_cgw add alpha auto --priority 100; [ "$status" -eq 0 ]
   run_cgw add beta 0 --priority 50; [ "$status" -eq 0 ]

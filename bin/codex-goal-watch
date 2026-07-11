@@ -393,7 +393,8 @@ cgw_cmd_run() {
     priority=${CGW_SESSION[PRIORITY]}
     wait=${CGW_STATE_DATA[WAITING_SINCE_EPOCH]:-$now}
     fp=${CGW_STATE_DATA[FINGERPRINT]}
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$priority" "$wait" "$session" "${CGW_SESSION[USER]}" "${CGW_STATE_DATA[SESSION_IDENTITY]}" "${CGW_STATE_DATA[LAST_DETAIL]}" "$fp" >>"$tmp"
+    window=${CGW_STATE_DATA[SESSION_IDENTITY]##*|}
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$priority" "$wait" "$session" "${CGW_SESSION[USER]}" "$window" "${CGW_STATE_DATA[LAST_DETAIL]}" "$fp" >>"$tmp"
   done < <(cgw_iter_session_files)
   [[ -s $tmp ]] || return 0
   if ((now < ${CGW_GLOBAL[COOLDOWN_UNTIL]:-0})); then
@@ -401,10 +402,9 @@ cgw_cmd_run() {
     return 0
   fi
   candidate=$(sort -t $'\t' -k1,1nr -k2,2n -k3,3 "$tmp" | head -n 1)
-  IFS=$'\t' read -r priority wait session user _ action fp <<<"$candidate"
+  IFS=$'\t' read -r priority wait session user window action fp <<<"$candidate"
   cgw_require_session "$session" || return
   full=$(cgw_resolve_registered) || return
-  window=${CGW_STATE_DATA[SESSION_IDENTITY]##*|}
   cgw_send_candidate "$session" "$full" "$user" "$window" "$action" "$now" "$fp" || cgw_info "Candidate changed or is no longer safe; no action taken."
 }
 

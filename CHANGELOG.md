@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2 - 2026-07-12
+
+- Preserve the selected candidate's window through the global scheduler.
+- Support explicit European, ISO, and English reset date-time formats.
+
 ## 0.1.1 - 2026-07-12
 
 - Recognize screen-wrapped `try again at` messages.
