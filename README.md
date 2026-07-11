@@ -1,38 +1,38 @@
 # codex-goal-watch
 
-Safely auto-resume usage-limited OpenAI Codex CLI goals running in GNU screen sessions on Debian and Ubuntu.
+Sicheres automatisches Fortsetzen usage-limitierter OpenAI-Codex-CLI-Goals in GNU-screen-Sitzungen auf Debian und Ubuntu.
 
-> Unofficial community project – not affiliated with or endorsed by OpenAI.
+> Inoffizielles Community-Projekt – nicht mit OpenAI verbunden und nicht von OpenAI unterstützt oder empfohlen.
 
-`codex-goal-watch` is a compatibility supervisor for unattended Codex CLI sessions. Native Codex behavior takes precedence if equivalent functionality becomes available.
+`codex-goal-watch` ist ein Kompatibilitäts-Supervisor für unbeaufsichtigte Codex-CLI-Sitzungen. Sobald Codex eine gleichwertige native Funktion bietet, hat diese Vorrang.
 
-## What it does
+## Zweck
 
-The watchdog reads visible GNU screen terminal output. It recognizes the combination of a Codex account usage-limit message, a paused goal status, and a valid displayed reset time. It waits for the reset plus a safety grace period, then resumes only when the visible composer is known safe.
+Der Watchdog liest die sichtbare Terminalausgabe von GNU screen. Er akzeptiert nur die eindeutige Kombination aus Codex-Usage-Limit, pausiertem Goal und gültiger angezeigter Reset-Zeit. Erst nach Reset und Sicherheitsfrist wird ein Resume versucht – und nur bei sicher erkennbarer Composer-Zeile.
 
-Several sessions may be registered and enabled. v0.1.0 examines all enabled sessions but sends at most one resume action per timer run and applies a global cooldown afterwards. Higher numerical priority wins; equal priority is ordered by waiting time and then session name. This avoids blindly resuming every session that shares one Codex usage allowance.
+Mehrere Sitzungen können registriert und aktiviert sein. Version 0.1.0 untersucht alle aktivierten Sitzungen, sendet aber höchstens eine Resume-Aktion pro Timerlauf und setzt danach einen globalen Cooldown. Eine höhere Zahl bei der Priorität gewinnt; bei gleicher Priorität entscheiden Wartezeit und Sitzungsname. Dadurch wird ein gemeinsames Codex-Kontingent nicht unkontrolliert mehrfach genutzt.
 
-## Security model
+## Sicherheitsmodell
 
-The default is fail-closed:
+Standard ist immer Fail-closed:
 
-- Unknown, ambiguous, or hidden composer content is never sent.
-- A generic usage limit alone, a goal status alone, or a reset time alone does not cause input.
-- An empty composer receives `/goal resume` plus Enter. A visible `/goal resume` draft receives Enter only.
-- A hidden `[Pasted Content ...]` draft is blocked until `codex-goal-watch arm-enter NAME`; the permission is consumed once.
-- Replace-goal confirmation automation is deliberately not implemented in v0.1.0. The dialog is reported as blocked.
-- A global `flock`, state fingerprints, per-session attempt limits, stale re-read checks, verification delay, and retry delay prevent action storms.
-- A successful `screen` key delivery is not a successful resume; a later visible-state verification is required.
+- Unbekannte, mehrdeutige oder versteckte Composer-Inhalte werden niemals abgesendet.
+- Eine allgemeine Limitmeldung, ein Goal-Status oder eine Reset-Zeit allein lösen keine Eingabe aus.
+- Bei leerem Composer wird `/goal resume` plus Enter gesendet. Bei sichtbar vorbereitetem `/goal resume` wird nur Enter gesendet.
+- Ein vollständig versteckter Entwurf `[Pasted Content ...]` bleibt blockiert, bis `codex-goal-watch arm-enter NAME` die einmalige, sitzungsgebundene Freigabe setzt.
+- Replace-goal-Dialoge werden in v0.1.0 bewusst nur erkannt und blockiert, nie bestätigt.
+- Globales `flock`, Fingerprints, sitzungsspezifische Versuchszähler, erneutes Lesen vor der Eingabe, Nachprüfung und Retry-Fristen verhindern Mehrfachsendungen und Stürme.
+- Ein erfolgreicher `screen`-Tastendruck gilt nicht als erfolgreicher Codex-Resume. Erst eine spätere sichtbare Zustandsänderung bestätigt den Erfolg.
 
-The terminal interface can change. Use `inspect` before enabling a session, because this tool only observes visible terminal output.
+Die Codex-TUI kann sich ändern. Vor einer Aktivierung sollte immer `inspect` verwendet werden, da das Projekt nur sichtbare Terminalausgabe auswertet.
 
-## Requirements
+## Voraussetzungen
 
-- Debian 12+ or Ubuntu 22.04+
-- Bash 5, GNU screen, Python 3.9+, `flock`, `pstree`, GNU `date`, `logger`, and systemd
-- Codex CLI running inside a GNU screen session owned by the configured user
+- Debian 12+ oder Ubuntu 22.04+
+- Bash 5, GNU screen, Python 3.9+, `flock`, `pstree`, GNU `date`, `logger` und systemd
+- Codex CLI in einer GNU-screen-Sitzung des konfigurierten Linux-Benutzers
 
-## Install
+## Installation
 
 ```bash
 git clone https://github.com/CoYoDuDe/codex-goal-watch.git
@@ -40,61 +40,61 @@ cd codex-goal-watch
 sudo ./scripts/install.sh --enable
 ```
 
-To register a session during installation:
+Eine Sitzung kann direkt bei der Installation registriert werden:
 
 ```bash
-sudo ./scripts/install.sh --user root --session project-alpha --window auto --timezone Europe/Berlin --enable
+sudo ./scripts/install.sh --user root --session projekt-alpha --window auto --timezone Europe/Berlin --enable
 ```
 
-The installer backs up existing program, library, configuration, state, and systemd files first. It migrates a legacy single-session `active` file into a session registry and removes one-time permissions during migration.
+Der Installer sichert vorhandenes Programm, Bibliotheken, Konfiguration, Zustand und systemd-Dateien. Eine alte Einzelsitzungsdatei `active` wird in die Mehrsitzungs-Registry migriert; einmalige Freigaben werden dabei entfernt.
 
-## Quick start and multiple sessions
+## Schnellstart mit mehreren Sitzungen
 
 ```bash
-sudo codex-goal-watch add project-alpha auto --priority 100
-sudo codex-goal-watch add project-beta auto --priority 80
-sudo codex-goal-watch add project-gamma auto --priority 50
+sudo codex-goal-watch add projekt-alpha auto --priority 100
+sudo codex-goal-watch add projekt-beta auto --priority 80
+sudo codex-goal-watch add projekt-gamma auto --priority 50
 
 codex-goal-watch list
 codex-goal-watch inspect --all
 codex-goal-watch status --all
 ```
 
-New screen sessions do not require systemd changes. `auto` examines up to `WINDOW_SCAN_MAX` windows and refuses ambiguous matches. `activate NAME` is a compatible alias for `add NAME`; it no longer disables other registrations. `deactivate NAME` disables one registration. Use `deactivate --all` only when all registrations should be disabled.
+Neue Screen-Sitzungen benötigen keine Änderung der systemd-Dateien. `auto` durchsucht höchstens `WINDOW_SCAN_MAX` Fenster und verweigert mehrdeutige Treffer. `activate NAME` ist ein kompatibler Alias für `add NAME` und deaktiviert keine anderen Registrierungen. `deactivate NAME` deaktiviert nur diese eine Sitzung; `deactivate --all` ist ausdrücklich nötig, um alle zu deaktivieren.
 
-## Commands
+## Befehle
 
-| Command | Purpose |
+| Befehl | Zweck |
 | --- | --- |
-| `list` | Show registered sessions and their last state. |
-| `add NAME [WINDOW|auto] [--priority N] [--user USER]` | Register and enable a session. |
-| `remove NAME` | Remove registry and runtime state; never stop screen. |
-| `enable NAME` / `disable NAME` | Toggle automatic handling. |
-| `priority NAME N` | Set priority from 0 to 100000. |
-| `status [NAME|--all]` | Show global cooldown and session state. |
-| `inspect [NAME|--all]` | Read-only UI analysis; never sends keys. |
-| `run` | One timer watchdog pass; may send at most one safe action. |
-| `arm-enter NAME` | Allow one hidden-paste Enter for that session. |
-| `disarm-enter NAME` | Remove the one-time permission. |
-| `reset-state [NAME|--all]` | Clear retry/fingerprint/verification state only. |
-| `cancel-pending [NAME|--all]` | Discard pending state but keep registration. |
-| `doctor` | Read-only dependency and configuration diagnostics. |
+| `list` | Registrierte und dynamisch erkannte Sitzungen mit letztem Zustand anzeigen. |
+| `add NAME [WINDOW|auto] [--priority N] [--user USER]` | Sitzung registrieren und aktivieren. |
+| `remove NAME` | Nur Registry und Laufzeitdaten entfernen, niemals screen beenden. |
+| `enable NAME` / `disable NAME` | Automatische Behandlung ein- oder ausschalten. |
+| `priority NAME N` | Priorität von 0 bis 100000 setzen. |
+| `status [NAME|--all]` | Globalen Cooldown und Sitzungszustände anzeigen. |
+| `inspect [NAME|--all]` | Vollständig lesende Analyse, sendet nie Tasten. |
+| `run` | Ein Timerlauf; höchstens eine sichere Aktion möglich. |
+| `arm-enter NAME` | Genau ein Enter für versteckten Paste-Inhalt dieser Sitzung erlauben. |
+| `disarm-enter NAME` | Einmalfreigabe entfernen. |
+| `reset-state [NAME|--all]` | Nur Retry-, Fingerprint- und Verifikationszustand löschen. |
+| `cancel-pending [NAME|--all]` | Ausstehenden Zustand verwerfen, Registrierung behalten. |
+| `doctor` | Abhängigkeiten und Konfiguration nur lesend prüfen. |
 
-`--force` on `add`/`activate` bypasses only the Codex-process preflight. It never disables a later safety check.
+`--force` bei `add` oder `activate` übersteuert ausschließlich die Codex-Prozessprüfung. Keine spätere Sicherheitsprüfung wird damit abgeschaltet.
 
-## Composer behavior
+## Composer-Verhalten
 
-| Visible bottom composer | Behavior after a valid reset |
+| Sichtbarer Composer am Terminalende | Verhalten nach gültigem Reset |
 | --- | --- |
-| empty prompt (`>`, `:`, or Codex prompt) | send `/goal resume` and Enter |
-| `/goal resume` or `/goal resume [Pasted Content ...]` | send Enter only |
-| `[Pasted Content ...]` | `BLOCKED_HIDDEN_PASTE` unless armed for this session |
-| any other text | `BLOCKED_UNKNOWN_INPUT` |
-| no trusted composer | `BLOCKED_COMPOSER_UNCERTAIN` |
+| leerer Prompt (`>`, `:` oder Codex-Prompt) | `/goal resume` und Enter senden |
+| `/goal resume` oder `/goal resume [Pasted Content ...]` | nur Enter senden |
+| `[Pasted Content ...]` | `BLOCKED_HIDDEN_PASTE`, bis diese Sitzung scharf geschaltet wird |
+| beliebiger anderer Text | `BLOCKED_UNKNOWN_INPUT` |
+| kein sicherer Composer | `BLOCKED_COMPOSER_UNCERTAIN` |
 
-## Configuration
+## Konfiguration
 
-`/etc/codex-goal-watch/config` is a strict `KEY=VALUE` file, not a shell script. Unknown keys and invalid values fail closed. Defaults:
+`/etc/codex-goal-watch/config` ist eine strenge `KEY=VALUE`-Datei und kein Shell-Skript. Unbekannte Schlüssel und ungültige Werte führen sicher zum Abbruch. Standardwerte:
 
 ```text
 TIMEZONE=Europe/Berlin
@@ -110,9 +110,9 @@ MAX_CONCURRENT_SESSIONS=1
 GLOBAL_ACTION_COOLDOWN_SECONDS=120
 ```
 
-`MAX_CONCURRENT_SESSIONS` is intentionally fixed to `1` in v0.1.0. Several sessions may wait, but only one resume can be sent per run and the global cooldown prevents concurrent use of a shared account quota.
+`MAX_CONCURRENT_SESSIONS` ist in v0.1.0 absichtlich auf `1` begrenzt. Mehrere Sitzungen dürfen warten, aber pro Lauf kann nur ein Resume gesendet werden; der globale Cooldown schützt das gemeinsame Kontingent zusätzlich.
 
-## Operations and troubleshooting
+## Betrieb und Fehlerdiagnose
 
 ```bash
 systemctl status codex-goal-watch.timer --no-pager
@@ -122,9 +122,9 @@ codex-goal-watch doctor
 codex-goal-watch inspect --all
 ```
 
-See [architecture](docs/architecture.md), [security model](docs/security-model.md), and [troubleshooting](docs/troubleshooting.md). Several Codex sessions can share one account usage limit; the watchdog queues candidates rather than treating a reset as permission to send input everywhere.
+Weitere Informationen: [Architektur](docs/architecture.md), [Sicherheitsmodell](docs/security-model.md) und [Fehlerdiagnose](docs/troubleshooting.md). Mehrere Codex-Sitzungen können dasselbe Account-Limit teilen; deshalb werden Kandidaten geordnet und nicht blind gleichzeitig fortgesetzt.
 
-## Update and uninstall
+## Aktualisierung und Deinstallation
 
 ```bash
 sudo ./scripts/update.sh
@@ -132,29 +132,29 @@ sudo ./scripts/uninstall.sh --keep-config
 sudo ./scripts/uninstall.sh --purge --non-interactive
 ```
 
-The updater validates source, backs up installed files, stops only the timer and service, installs atomically, reloads systemd, and restores the backup if installation fails. Neither script stops GNU screen or Codex.
+Der Updater prüft Quelltext, sichert die Installation, stoppt nur Timer und Oneshot-Service, installiert atomar, lädt systemd neu und stellt bei Fehlern die Sicherung wieder her. Weder GNU screen noch Codex werden beendet.
 
-## Known limitations
+## Bekannte Einschränkungen
 
-- The watcher supports GNU screen, not tmux, in v0.1.0.
-- Codex TUI changes may require detection updates.
-- Replace-goal dialogs are detected and blocked, never confirmed.
-- Terminal observation cannot prove that Codex accepted a keystroke, so a follow-up verification is always required.
+- v0.1.0 unterstützt GNU screen, nicht tmux.
+- Änderungen an der Codex-TUI können Anpassungen der Erkennung nötig machen.
+- Replace-goal-Dialoge werden erkannt und blockiert, nie bestätigt.
+- Terminalbeobachtung kann keine erfolgreiche Codex-Verarbeitung beweisen; daher ist die Nachprüfung verpflichtend.
 
-## Contributing
+## Mitwirken
 
-Run `make lint` and `make test` before opening a change. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Vor Änderungen `make lint` und `make test` ausführen. Siehe [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Support the project
+## Unterstützung
 
-This project is independently developed and provided free of charge. Voluntary support helps cover infrastructure, servers, domains, testing, maintenance and continued development.
+Dieses Projekt wird unabhängig und privat entwickelt und kostenlos bereitgestellt. Freiwillige Unterstützung hilft bei Infrastruktur, Servern, Domains, Tests, Wartung und Weiterentwicklung.
 
 - [PayPal](https://paypal.me/CoYoDuDe)
 - [Buy Me a Coffee](https://www.buymeacoffee.com/CoYoDuDe)
-- [More projects and information](https://dnsmith.net/)
+- [Weitere Projekte und Informationen](https://dnsmith.net/)
 
-Support is entirely voluntary. There is no subscription requirement, and support does not create an entitlement to specific features or personal support.
+Unterstützung ist freiwillig. Es gibt keinen Abo-Zwang und daraus entsteht kein Anspruch auf bestimmte Funktionen oder persönlichen Support.
 
-## License
+## Lizenz
 
-MIT. See [LICENSE](LICENSE).
+MIT. Siehe [LICENSE](LICENSE).
