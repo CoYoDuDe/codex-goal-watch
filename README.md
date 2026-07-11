@@ -3,6 +3,7 @@
 Sicheres automatisches Fortsetzen usage-limitierter OpenAI-Codex-CLI-Goals in GNU-screen-Sitzungen auf Debian und Ubuntu.
 
 > Inoffizielles Community-Projekt – nicht mit OpenAI verbunden und nicht von OpenAI unterstützt oder empfohlen.
+> Unofficial community project – not affiliated with or endorsed by OpenAI.
 
 `codex-goal-watch` ist ein Kompatibilitäts-Supervisor für unbeaufsichtigte Codex-CLI-Sitzungen. Sobald Codex eine gleichwertige native Funktion bietet, hat diese Vorrang.
 
