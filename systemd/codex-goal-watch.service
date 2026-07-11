@@ -1,0 +1,20 @@
+[Unit]
+Description=Safe Codex goal resume watchdog for GNU screen
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+Nice=10
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectSystem=full
+ReadWritePaths=/etc/codex-goal-watch /var/lib/codex-goal-watch /run/codex-goal-watch
+RuntimeDirectory=codex-goal-watch
+RuntimeDirectoryMode=0700
+TimeoutStartSec=45
+ExecStart=/usr/local/bin/codex-goal-watch run

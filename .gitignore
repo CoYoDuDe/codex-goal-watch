@@ -1,0 +1,6 @@
+*.swp
+*.tmp
+.DS_Store
+coverage/
+test-results/
+__pycache__/

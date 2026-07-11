@@ -1,0 +1,45 @@
+name: test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+      - name: Install test tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats shellcheck
+          go install mvdan.cc/sh/v3/cmd/shfmt@v3.10.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Syntax, lint, and tests
+        run: |
+          make lint
+          make test
+      - name: Isolated install, migration, update, and uninstall
+        run: |
+          root="$(mktemp -d)"
+          mkdir -p "$root/etc/codex-goal-watch" "$root/var/backups"
+          printf 'TIMEZONE=UTC\nSCREEN_USER=root\n' > "$root/etc/codex-goal-watch/config"
+          printf 'alpha\nauto\n' > "$root/etc/codex-goal-watch/active"
+          PATH="$GITHUB_WORKSPACE/tests/helpers/bin:$PATH" CGW_INSTALL_ROOT="$root" ./scripts/install.sh --non-interactive
+          test -f "$root/etc/codex-goal-watch/active.migrated-v0.1.0"
+          PATH="$GITHUB_WORKSPACE/tests/helpers/bin:$PATH" CGW_INSTALL_ROOT="$root" ./scripts/update.sh
+          PATH="$GITHUB_WORKSPACE/tests/helpers/bin:$PATH" CGW_INSTALL_ROOT="$root" ./scripts/uninstall.sh --keep-config --non-interactive
+          test -f "$root/etc/codex-goal-watch/config"
+      - name: Privacy, UTF-8, and mojibake scan
+        run: |
+          ! rg -n --hidden -g '!.git/**' 'BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY|gh[pous]_[A-Za-z0-9_]+|sk-[A-Za-z0-9]+'
+          ! rg -n --hidden -g '!.git/**' '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+          ! rg -n --hidden -g '!.git/**' "$(printf '/%s/|\\303\\242\\302\\200\\302\\254|\\357\\277\\275' root)"
+          ! find . -type f -not -path './.git/*' -print0 | xargs -0 file --mime-encoding | grep -Ev ': *(us-ascii|utf-8|binary)$'

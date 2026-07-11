@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+case ${1:-} in is-active) printf 'active\n' ;; *) exit 0 ;; esac

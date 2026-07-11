@@ -1,0 +1,475 @@
+#!/usr/bin/env bash
+# Safe watchdog for usage-limited Codex CLI goals in GNU screen.
+set -o pipefail
+
+CGW_BIN_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+if [[ -n ${CGW_LIB_DIR:-} ]]; then
+  CGW_LIB=$CGW_LIB_DIR
+elif [[ -d $CGW_BIN_DIR/../lib/codex-goal-watch ]]; then
+  CGW_LIB=$(cd -- "$CGW_BIN_DIR/../lib/codex-goal-watch" && pwd)
+else
+  CGW_LIB=/usr/local/lib/codex-goal-watch
+fi
+CGW_ETC=${CGW_ETC:-/etc/codex-goal-watch}
+CGW_STATE=${CGW_STATE:-/var/lib/codex-goal-watch}
+CGW_RUN=${CGW_RUN:-/run/codex-goal-watch}
+
+cgw_error() { printf 'codex-goal-watch: %s\n' "$*" >&2; }
+cgw_info() { printf 'codex-goal-watch: %s\n' "$*"; }
+
+# shellcheck source=../lib/codex-goal-watch/config.sh
+source "$CGW_LIB/config.sh"
+source "$CGW_LIB/state.sh"
+source "$CGW_LIB/time.sh"
+source "$CGW_LIB/screen.sh"
+source "$CGW_LIB/detection.sh"
+source "$CGW_LIB/actions.sh"
+
+cgw_sync_config() {
+  export CGW_CONFIG_TIMEZONE=${CGW_CONFIG[TIMEZONE]}
+  export CGW_CONFIG_GRACE_SECONDS=${CGW_CONFIG[GRACE_SECONDS]}
+  export CGW_CONFIG_RETRY_SECONDS=${CGW_CONFIG[RETRY_SECONDS]}
+  export CGW_CONFIG_VERIFY_SECONDS=${CGW_CONFIG[VERIFY_SECONDS]}
+  export CGW_CONFIG_MAX_ATTEMPTS=${CGW_CONFIG[MAX_ATTEMPTS]}
+  export CGW_CONFIG_WINDOW_SCAN_MAX=${CGW_CONFIG[WINDOW_SCAN_MAX]}
+  export CGW_CONFIG_GLOBAL_ACTION_COOLDOWN_SECONDS=${CGW_CONFIG[GLOBAL_ACTION_COOLDOWN_SECONDS]}
+}
+
+cgw_init() {
+  cgw_load_config || exit 2
+  cgw_sync_config
+}
+
+cgw_usage() {
+  cat <<'EOF'
+Usage: codex-goal-watch COMMAND [OPTIONS]
+
+Commands:
+  add NAME [WINDOW|auto] [--priority N] [--user USER] [--force]
+  remove NAME                 Remove registry and runtime state only.
+  enable NAME | disable NAME | disable --all
+  priority NAME N
+  activate NAME [WINDOW|auto] [--priority N] [--user USER] [--force]
+                              Compatible alias for add/enable.
+  deactivate NAME | deactivate --all
+  list
+  status [NAME|--all]
+  inspect [NAME|--all]        Read-only; never sends input.
+  run                         One timer watchdog pass; may send one action.
+  arm-enter NAME | disarm-enter NAME
+  reset-state [NAME|--all] | cancel-pending [NAME|--all]
+  doctor | version | help
+
+Multiple sessions can be enabled. v0.1.0 sends at most one safe resume per
+timer pass and enforces a global cooldown. Unknown composer content is blocked.
+EOF
+}
+
+cgw_require_session() {
+  local requested=$1 file
+  file=$(cgw_find_session_file "$requested") || {
+    cgw_error "Registered session not found or ambiguous: $requested"
+    return 1
+  }
+  cgw_load_session_file "$file"
+}
+
+cgw_resolve_registered() {
+  local resolved
+  resolved=$(cgw_resolve_session "${CGW_SESSION[SESSION]}" "${CGW_SESSION[USER]}") || return
+  printf '%s\n' "$resolved"
+}
+
+cgw_cmd_add() {
+  local requested=${1:-} window=auto priority=50 user=${CGW_CONFIG[SCREEN_USER]} force=0 full
+  shift || true
+  [[ -n $requested ]] || {
+    cgw_error "add requires NAME"
+    return 2
+  }
+  if [[ ${1:-} != --* && -n ${1:-} ]]; then
+    window=$1
+    shift
+  fi
+  while (($#)); do
+    case $1 in
+      --priority)
+        priority=${2:-}
+        shift 2
+        ;;
+      --user)
+        user=${2:-}
+        shift 2
+        ;;
+      --force)
+        force=1
+        shift
+        ;;
+      *)
+        cgw_error "Unknown add option: $1"
+        return 2
+        ;;
+    esac
+  done
+  [[ $window == auto || $window =~ ^[0-9]+$ ]] || {
+    cgw_error "WINDOW must be auto or a non-negative number"
+    return 2
+  }
+  if ! cgw_is_uint "$priority" || ((priority > 100000)); then
+    cgw_error "PRIORITY must be 0..100000"
+    return 2
+  fi
+  [[ $user =~ ^[a-z_][a-z0-9_-]*$ ]] || {
+    cgw_error "Invalid user"
+    return 2
+  }
+  full=$(cgw_resolve_session "$requested" "$user") || {
+    cgw_error "Screen session not found or ambiguous: $requested"
+    return 1
+  }
+  if ((force == 0)) && ! cgw_session_has_codex "$full"; then
+    cgw_error "No Codex process found in $full (use --force only to override this check)"
+    return 1
+  fi
+  if cgw_find_session_file "$full" >/dev/null; then
+    cgw_load_session_file "$(cgw_find_session_file "$full")"
+    # shellcheck disable=SC2153 # Registry keys are declared in sourced config.sh.
+    CGW_SESSION[WINDOW]=$window
+    CGW_SESSION[USER]=$user
+    # shellcheck disable=SC2153 # Registry keys are declared in sourced config.sh.
+    CGW_SESSION[PRIORITY]=$priority
+    CGW_SESSION[ENABLED]=1
+  else
+    CGW_SESSION=([SESSION]=$full [WINDOW]=$window [USER]=$user [PRIORITY]=$priority [ENABLED]=1 [CREATED_EPOCH]="$(cgw_now)")
+  fi
+  cgw_write_session
+  cgw_info "Registered and enabled: $full (window $window, priority $priority)"
+}
+
+cgw_cmd_remove() {
+  local requested=${1:-} file session
+  [[ -n $requested && $# == 1 ]] || {
+    cgw_error "remove requires exactly one NAME"
+    return 2
+  }
+  file=$(cgw_find_session_file "$requested") || {
+    cgw_error "Registered session not found or ambiguous"
+    return 1
+  }
+  cgw_load_session_file "$file"
+  session=${CGW_SESSION[SESSION]}
+  rm -f -- "$file"
+  rm -rf -- "$(cgw_session_state_dir "$session")"
+  cgw_info "Removed registration only: $session"
+}
+
+cgw_cmd_enable_disable() {
+  local mode=$1 requested=${2:-} file
+  [[ -n $requested ]] || {
+    cgw_error "$mode requires NAME or --all"
+    return 2
+  }
+  if [[ $requested == --all ]]; then
+    [[ $# == 2 ]] || {
+      cgw_error "$mode --all takes no further arguments"
+      return 2
+    }
+    while IFS= read -r file; do
+      [[ -f $file ]] || continue
+      cgw_load_session_file "$file" || return
+      CGW_SESSION[ENABLED]=$([[ $mode == enable ]] && printf 1 || printf 0)
+      cgw_write_session
+    done < <(cgw_iter_session_files)
+    cgw_info "All registrations ${mode}d"
+    return
+  fi
+  cgw_require_session "$requested" || return
+  CGW_SESSION[ENABLED]=$([[ $mode == enable ]] && printf 1 || printf 0)
+  cgw_write_session
+  if [[ $mode == disable ]]; then
+    cgw_disarm "${CGW_SESSION[SESSION]}"
+    cgw_cancel_pending_session "${CGW_SESSION[SESSION]}"
+  fi
+  cgw_info "${mode^}d: ${CGW_SESSION[SESSION]}"
+}
+
+cgw_cmd_priority() {
+  local requested=${1:-} priority=${2:-}
+  [[ $# == 2 ]] || {
+    cgw_error "priority requires NAME and N"
+    return 2
+  }
+  if ! cgw_is_uint "$priority" || ((priority > 100000)); then
+    cgw_error "PRIORITY must be 0..100000"
+    return 2
+  fi
+  cgw_require_session "$requested" || return
+  CGW_SESSION[PRIORITY]=$priority
+  cgw_write_session
+  cgw_info "Priority for ${CGW_SESSION[SESSION]}: $priority"
+}
+
+cgw_print_session() {
+  local session=$1 full codex=no state=UNSEEN reset=- attempts=0 active=no
+  cgw_load_state "$session"
+  state=${CGW_STATE_DATA[STATUS]:-UNSEEN}
+  reset=${CGW_STATE_DATA[RESET_EPOCH]:--}
+  attempts=${CGW_STATE_DATA[ATTEMPTS]:-0}
+  full=$(cgw_resolve_registered 2>/dev/null || true)
+  [[ -n $full ]] && cgw_session_has_codex "$full" && codex=yes
+  [[ ${CGW_SESSION[ENABLED]} == 1 ]] && active=yes
+  printf '%-32s %-10s %-5s %-10s %-7s %-8s %-28s %-8s %s\n' "${CGW_SESSION[SESSION]}" "${CGW_SESSION[USER]}" "$codex" yes "$active" "${CGW_SESSION[PRIORITY]}" "$state" "$attempts" "$reset"
+}
+
+cgw_cmd_list() {
+  local file full codex
+  declare -A listed=()
+  printf '%-32s %-10s %-5s %-10s %-7s %-8s %-28s %-8s %s\n' 'SCREEN-SITZUNG' USER CODEX REGISTRIERT ENABLED PRIORITAT STATUS VERSUCHE RESET
+  printf '%s\n' '----------------------------------------------------------------------------------------------------------------------------------------'
+  while IFS= read -r file; do
+    [[ -f $file ]] || continue
+    cgw_load_session_file "$file" || continue
+    listed["${CGW_SESSION[SESSION]}"]=1
+    cgw_print_session "${CGW_SESSION[SESSION]}"
+  done < <(cgw_iter_session_files)
+  while IFS= read -r full; do
+    [[ -n $full && ! -v "listed[$full]" ]] || continue
+    codex=no
+    cgw_session_has_codex "$full" && codex=yes
+    printf '%-32s %-10s %-5s %-10s %-7s %-8s %-28s %-8s %s\n' "$full" "${CGW_CONFIG[SCREEN_USER]}" "$codex" no no - UNREGISTERED - -
+  done < <(cgw_screen_list "${CGW_CONFIG[SCREEN_USER]}")
+}
+
+cgw_cmd_inspect_one() {
+  local requested=$1 full result status window reset action
+  cgw_require_session "$requested" || return
+  if [[ ${CGW_SESSION[ENABLED]} != 1 ]]; then
+    cgw_info "${CGW_SESSION[SESSION]}: DISABLED"
+    return
+  fi
+  full=$(cgw_resolve_registered) || {
+    cgw_info "${CGW_SESSION[SESSION]}: SESSION_NOT_FOUND"
+    return
+  }
+  cgw_session_has_codex "$full" || {
+    cgw_info "$full: CODEX_NOT_FOUND"
+    return
+  }
+  result=$(cgw_analyze_session "$full" "${CGW_SESSION[USER]}" "${CGW_SESSION[WINDOW]}")
+  IFS=$'\t' read -r status window reset action <<<"$result"
+  printf '%s: %s window=%s reset=%s composer=%s (read-only)\n' "$full" "$status" "${window:--}" "${reset:--}" "$action"
+}
+
+cgw_cmd_inspect() {
+  local requested=${1:---all} file
+  if [[ $requested == --all ]]; then
+    while IFS= read -r file; do
+      [[ -f $file ]] || continue
+      cgw_load_session_file "$file" && cgw_cmd_inspect_one "${CGW_SESSION[SESSION]}"
+    done < <(cgw_iter_session_files)
+  else
+    cgw_cmd_inspect_one "$requested"
+  fi
+}
+
+cgw_cmd_status() {
+  local requested=${1:---all} file
+  cgw_load_global_state
+  printf 'Global cooldown until: %s; last action: %s\n' "${CGW_GLOBAL[COOLDOWN_UNTIL]:-none}" "${CGW_GLOBAL[LAST_ACTION_SESSION]:-none}"
+  if [[ $requested == --all ]]; then
+    cgw_cmd_list
+    return
+  fi
+  cgw_require_session "$requested" || return
+  cgw_load_state "${CGW_SESSION[SESSION]}"
+  printf 'Session: %s\nEnabled: %s\nWindow: %s\nPriority: %s\nState: %s\nAttempts: %s\nArmed enter: %s\n' \
+    "${CGW_SESSION[SESSION]}" "${CGW_SESSION[ENABLED]}" "${CGW_SESSION[WINDOW]}" "${CGW_SESSION[PRIORITY]}" "${CGW_STATE_DATA[STATUS]:-UNSEEN}" "${CGW_STATE_DATA[ATTEMPTS]:-0}" "$(cgw_is_armed "${CGW_SESSION[SESSION]}" && printf yes || printf no)"
+}
+
+cgw_cmd_arm() {
+  local mode=$1 requested=${2:-}
+  [[ $# == 2 ]] || {
+    cgw_error "$mode requires exactly one NAME"
+    return 2
+  }
+  cgw_require_session "$requested" || return
+  [[ ${CGW_SESSION[ENABLED]} == 1 ]] || {
+    cgw_error "Session is disabled"
+    return 1
+  }
+  if [[ $mode == arm-enter ]]; then cgw_arm "${CGW_SESSION[SESSION]}"; else cgw_disarm "${CGW_SESSION[SESSION]}"; fi
+  cgw_info "$mode: ${CGW_SESSION[SESSION]}"
+}
+
+cgw_cmd_reset_or_cancel() {
+  local mode=$1 requested=${2:---all} file
+  if [[ $requested == --all ]]; then
+    while IFS= read -r file; do
+      [[ -f $file ]] || continue
+      cgw_load_session_file "$file" || continue
+      cgw_cancel_pending_session "${CGW_SESSION[SESSION]}"
+    done < <(cgw_iter_session_files)
+  else
+    cgw_require_session "$requested" || return
+    cgw_cancel_pending_session "${CGW_SESSION[SESSION]}"
+  fi
+  cgw_info "$mode complete"
+}
+
+cgw_process_run_session() {
+  local file=$1 now=$2 full result status window reset action previous verify fp
+  cgw_load_session_file "$file" || return
+  [[ ${CGW_SESSION[ENABLED]} == 1 ]] || return
+  previous=
+  cgw_load_state "${CGW_SESSION[SESSION]}"
+  previous=${CGW_STATE_DATA[STATUS]:-}
+  full=$(cgw_resolve_registered 2>/dev/null || true)
+  if [[ -z $full ]]; then
+    CGW_STATE_DATA[STATUS]=SESSION_NOT_FOUND
+    cgw_write_state "${CGW_SESSION[SESSION]}"
+    return
+  fi
+  if ! cgw_session_has_codex "$full"; then
+    CGW_STATE_DATA[STATUS]=CODEX_NOT_FOUND
+    cgw_write_state "${CGW_SESSION[SESSION]}"
+    return
+  fi
+  result=$(cgw_analyze_session "$full" "${CGW_SESSION[USER]}" "${CGW_SESSION[WINDOW]}")
+  IFS=$'\t' read -r status window reset action <<<"$result"
+  verify=${CGW_STATE_DATA[VERIFY_AFTER_EPOCH]:-0}
+  if [[ $previous == RESUME_SENT || $previous == VERIFYING_RESUME ]]; then
+    if ((now < verify)); then
+      CGW_STATE_DATA[STATUS]=VERIFYING_RESUME
+      cgw_write_state "${CGW_SESSION[SESSION]}"
+      return
+    fi
+    if [[ $status != READY_TO_RESUME && $status != WAITING_FOR_RESET ]]; then
+      CGW_STATE_DATA[STATUS]=RESUME_SUCCEEDED
+      unset 'CGW_STATE_DATA[VERIFY_AFTER_EPOCH]'
+      cgw_write_state "${CGW_SESSION[SESSION]}"
+      return
+    fi
+    CGW_STATE_DATA[STATUS]=RETRY_WAIT
+    CGW_STATE_DATA[RETRY_AFTER_EPOCH]=$((now + CGW_CONFIG_RETRY_SECONDS))
+    unset 'CGW_STATE_DATA[VERIFY_AFTER_EPOCH]'
+    cgw_write_state "${CGW_SESSION[SESSION]}"
+    return
+  fi
+  cgw_record_analysis "${CGW_SESSION[SESSION]}" "$full" "${CGW_SESSION[USER]}" "$status" "$window" "$reset" "$action" "$now"
+  if [[ ${CGW_STATE_DATA[FINGERPRINT]:-} == "$(cgw_fingerprint "$full" "$window" "${reset:-0}")" ]] && ((${CGW_STATE_DATA[ATTEMPTS]:-0} >= CGW_CONFIG_MAX_ATTEMPTS)); then
+    CGW_STATE_DATA[STATUS]=MAX_ATTEMPTS_REACHED
+    cgw_write_state "${CGW_SESSION[SESSION]}"
+    return
+  fi
+  if [[ $status == BLOCKED_HIDDEN_PASTE ]] && cgw_is_armed "${CGW_SESSION[SESSION]}"; then
+    CGW_STATE_DATA[STATUS]=READY_TO_RESUME
+    CGW_STATE_DATA[LAST_DETAIL]=HIDDEN
+    cgw_write_state "${CGW_SESSION[SESSION]}"
+  fi
+}
+
+cgw_cmd_run() {
+  local now file session wait priority full window action fp candidate tmp
+  install -d -m 0700 "$CGW_RUN" "$CGW_STATE"
+  exec 9>"$CGW_RUN/watch.lock"
+  flock -n 9 || {
+    cgw_info 'Another run holds the global lock; no action taken.'
+    return 0
+  }
+  now=$(cgw_now)
+  cgw_load_global_state
+  tmp=$(mktemp "${TMPDIR:-/tmp}/cgw-candidates.XXXXXX")
+  trap 'rm -f -- "$tmp"' RETURN
+  while IFS= read -r file; do
+    [[ -f $file ]] || continue
+    cgw_process_run_session "$file" "$now"
+  done < <(cgw_iter_session_files)
+  while IFS= read -r file; do
+    [[ -f $file ]] || continue
+    cgw_load_session_file "$file" || continue
+    session=${CGW_SESSION[SESSION]}
+    cgw_may_resume "$session" "$now" || continue
+    cgw_load_state "$session"
+    priority=${CGW_SESSION[PRIORITY]}
+    wait=${CGW_STATE_DATA[WAITING_SINCE_EPOCH]:-$now}
+    fp=${CGW_STATE_DATA[FINGERPRINT]}
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$priority" "$wait" "$session" "${CGW_SESSION[USER]}" "${CGW_STATE_DATA[SESSION_IDENTITY]}" "${CGW_STATE_DATA[LAST_DETAIL]}" "$fp" >>"$tmp"
+  done < <(cgw_iter_session_files)
+  [[ -s $tmp ]] || return 0
+  if ((now < ${CGW_GLOBAL[COOLDOWN_UNTIL]:-0})); then
+    cgw_info 'Global cooldown active; candidates retained.'
+    return 0
+  fi
+  candidate=$(sort -t $'\t' -k1,1nr -k2,2n -k3,3 "$tmp" | head -n 1)
+  IFS=$'\t' read -r priority wait session user _ action fp <<<"$candidate"
+  cgw_require_session "$session" || return
+  full=$(cgw_resolve_registered) || return
+  window=${CGW_STATE_DATA[SESSION_IDENTITY]##*|}
+  cgw_send_candidate "$session" "$full" "$user" "$window" "$action" "$now" "$fp" || cgw_info "Candidate changed or is no longer safe; no action taken."
+}
+
+cgw_cmd_doctor() {
+  local fail=0 command
+  for command in bash screen flock date logger pstree python3 systemctl; do
+    if command -v "$command" >/dev/null; then printf 'OK   command: %s\n' "$command"; else
+      printf 'FAIL command: %s\n' "$command"
+      fail=1
+    fi
+  done
+  if cgw_load_config; then
+    cgw_sync_config
+    printf 'OK   configuration\n'
+  else
+    printf 'FAIL configuration\n'
+    fail=1
+  fi
+  if [[ -d $CGW_ETC && -d $CGW_STATE ]]; then
+    printf 'OK   state directories\n'
+  else
+    printf 'WARN state directories absent until installation\n'
+  fi
+  [[ -d $CGW_ETC/sessions.d ]] && printf 'OK   session registry\n' || printf 'WARN no session registry\n'
+  if LC_ALL=C grep -RIl --exclude='*.py' --exclude-dir=.git $'\xEF\xBF\xBD' "$CGW_LIB" >/dev/null 2>&1; then printf 'WARN replacement characters found in source\n'; else printf 'OK   UTF-8 replacement-character scan\n'; fi
+  return "$fail"
+}
+
+cgw_cmd_version() {
+  local version=0.1.0
+  [[ -r $CGW_LIB/VERSION ]] && version=$(tr -d '\n' <"$CGW_LIB/VERSION")
+  [[ -r $CGW_BIN_DIR/../VERSION ]] && version=$(tr -d '\n' <"$CGW_BIN_DIR/../VERSION")
+  printf 'codex-goal-watch %s\n' "$version"
+}
+
+main() {
+  local command=${1:-help}
+  shift || true
+  case $command in
+    help | -h | --help) cgw_usage ;;
+    version) cgw_cmd_version ;;
+    *)
+      cgw_init
+      case $command in
+        add) cgw_cmd_add "$@" ;;
+        activate) cgw_cmd_add "$@" ;;
+        remove) cgw_cmd_remove "$@" ;;
+        enable | disable) cgw_cmd_enable_disable "$command" "$@" ;;
+        deactivate) cgw_cmd_enable_disable disable "$@" ;;
+        priority) cgw_cmd_priority "$@" ;;
+        list) cgw_cmd_list "$@" ;;
+        status) cgw_cmd_status "$@" ;;
+        inspect) cgw_cmd_inspect "$@" ;;
+        run) cgw_cmd_run "$@" ;;
+        arm-enter | disarm-enter) cgw_cmd_arm "$command" "$@" ;;
+        reset-state | cancel-pending) cgw_cmd_reset_or_cancel "$command" "$@" ;;
+        doctor) cgw_cmd_doctor "$@" ;;
+        *)
+          cgw_error "Unknown command: $command"
+          cgw_usage
+          return 2
+          ;;
+      esac
+      ;;
+  esac
+}
+
+main "$@"

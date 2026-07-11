@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+if [[ ${MOCK_CODEX:-1} == 1 ]]; then printf 'screen,101 /usr/bin/codex\n'; else printf 'screen,101 /bin/bash\n'; fi
