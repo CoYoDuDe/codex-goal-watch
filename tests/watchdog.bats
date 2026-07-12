@@ -59,6 +59,14 @@ run_cgw() { run "$REPO/bin/codex-goal-watch" "$@"; }
   grep -q "^$CGW_RUN/" "$MOCK_HARDCOPY_LOG"
 }
 
+@test "hardcopy analysis waits for an asynchronously written screen file" {
+  export MOCK_HARDCOPY_ASYNC=1
+  run_cgw add alpha
+  run_cgw inspect alpha
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'BLOCKED_COMPOSER_UNCERTAIN'* ]]
+}
+
 @test "explicit European dates are retained and parsed without daily rollover" {
   run bash -c "python3 '$CGW_LIB/detect.py' < '$MOCK_FIXTURES/ready-explicit-date'"
   [ "$status" -eq 0 ]

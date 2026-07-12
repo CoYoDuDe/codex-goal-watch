@@ -23,7 +23,14 @@ if [[ $joined == *' hardcopy '* ]]; then
   fixture=${MOCK_FIXTURE:-normal}
   source_file="$MOCK_FIXTURES/${fixture}.${window}"
   [[ -f $source_file ]] || source_file="$MOCK_FIXTURES/$fixture"
-  cp "$source_file" "$file"
+  if [[ ${MOCK_HARDCOPY_ASYNC:-0} == 1 ]]; then
+    (
+      sleep 0.1
+      cp "$source_file" "$file"
+    ) &
+  else
+    cp "$source_file" "$file"
+  fi
   exit 0
 fi
 if [[ $joined == *' stuff '* ]]; then

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5 - 2026-07-12
+
+- Remove unsafe function-return cleanup traps that could delete a hardcopy during nested analysis.
+- Wait briefly for GNU screen to finish writing a non-empty hardcopy before parsing it.
+
 ## 0.1.4 - 2026-07-12
 
 - Send `/goal resume` and Enter together in one GNU-screen input operation, preventing a lost Enter between two separate operations.

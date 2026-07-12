@@ -4,6 +4,7 @@
 cgw_detect_file() {
   declare -gA CGW_DETECT=()
   local file=$1 line key value
+  [[ -s $file ]] || return 1
   while IFS= read -r line || [[ -n $line ]]; do
     [[ $line =~ ^([A-Z_]+)=(.*)$ ]] || continue
     key=${BASH_REMATCH[1]}
@@ -20,10 +21,12 @@ cgw_capture_file() {
 cgw_find_window() {
   local session=$1 user=$2 configured=$3 tmp window matches=() inspected=0
   tmp=$(cgw_capture_file)
-  trap 'rm -f -- "$tmp"' RETURN
   if [[ $configured != auto ]]; then
-    cgw_hardcopy "$session" "$user" "$configured" "$tmp" || return 1
-    cgw_detect_file "$tmp"
+    if ! cgw_hardcopy "$session" "$user" "$configured" "$tmp" || ! cgw_detect_file "$tmp"; then
+      rm -f -- "$tmp"
+      return 1
+    fi
+    rm -f -- "$tmp"
     printf '%s\n' "$configured"
     return 0
   fi
@@ -32,11 +35,12 @@ cgw_find_window() {
     inspected=$((inspected + 1))
     ((inspected <= CGW_CONFIG_WINDOW_SCAN_MAX)) || break
     cgw_hardcopy "$session" "$user" "$window" "$tmp" || continue
-    cgw_detect_file "$tmp"
+    cgw_detect_file "$tmp" || continue
     if [[ ${CGW_DETECT[LIMIT]} == 1 || ${CGW_DETECT[GOAL]} == 1 || ${CGW_DETECT[COMPLETE]} == 1 || ${CGW_DETECT[REPLACE]} == 1 ]]; then
       matches+=("$window")
     fi
   done < <(cgw_windows "$session" "$user")
+  rm -f -- "$tmp"
   ((${#matches[@]} == 1)) || return 2
   printf '%s\n' "${matches[0]}"
 }
@@ -56,12 +60,17 @@ cgw_analyze_session() {
     return 0
   fi
   tmp=$(cgw_capture_file)
-  trap 'rm -f -- "$tmp"' RETURN
   cgw_hardcopy "$session" "$user" "$window" "$tmp" || {
+    rm -f -- "$tmp"
     printf 'ERROR\t%s\t\tNONE\n' "$window"
     return
   }
-  cgw_detect_file "$tmp"
+  cgw_detect_file "$tmp" || {
+    rm -f -- "$tmp"
+    printf 'ERROR\t%s\t\tNONE\n' "$window"
+    return
+  }
+  rm -f -- "$tmp"
   if [[ ${CGW_DETECT[COMPLETE]} == 1 ]]; then
     printf 'GOAL_COMPLETE\t%s\t\tNONE\n' "$window"
     return

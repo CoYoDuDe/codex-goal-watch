@@ -45,7 +45,13 @@ cgw_windows() {
 
 cgw_hardcopy() {
   local session=$1 user=$2 window=$3 file=$4
-  cgw_screen_as "$user" -S "$session" -p "$window" -X hardcopy -h "$file" >/dev/null 2>&1
+  : >"$file"
+  cgw_screen_as "$user" -S "$session" -p "$window" -X hardcopy -h "$file" >/dev/null 2>&1 || return 1
+  for _ in {1..20}; do
+    [[ -s $file ]] && return 0
+    sleep 0.05
+  done
+  return 1
 }
 
 cgw_send_resume() {
