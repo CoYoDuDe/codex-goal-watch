@@ -137,6 +137,8 @@ sudo ./scripts/uninstall.sh --purge --non-interactive
 
 Der Updater prüft Quelltext, sichert die Installation, stoppt nur Timer und Oneshot-Service, installiert atomar, lädt systemd neu und stellt bei Fehlern die Sicherung wieder her. Weder GNU screen noch Codex werden beendet.
 
+Der systemd-Service bleibt mit `PrivateTmp=yes` gehärtet. Für die ausschließlich lesenden GNU-screen-Hardcopies verwendet der Watchdog deshalb sein geschütztes gemeinsames Laufzeitverzeichnis unter `/run/codex-goal-watch`.
+
 ## Bekannte Einschränkungen
 
 - v0.1.0 unterstützt GNU screen, nicht tmux.

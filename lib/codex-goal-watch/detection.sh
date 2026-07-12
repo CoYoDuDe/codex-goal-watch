@@ -12,9 +12,14 @@ cgw_detect_file() {
   done < <(python3 "$CGW_LIB/detect.py" <"$file")
 }
 
+cgw_capture_file() {
+  install -d -m 0700 "$CGW_RUN"
+  mktemp "$CGW_RUN/hardcopy.XXXXXX"
+}
+
 cgw_find_window() {
   local session=$1 user=$2 configured=$3 tmp window matches=() inspected=0
-  tmp=$(mktemp "${TMPDIR:-/tmp}/cgw-hardcopy.XXXXXX")
+  tmp=$(cgw_capture_file)
   trap 'rm -f -- "$tmp"' RETURN
   if [[ $configured != auto ]]; then
     cgw_hardcopy "$session" "$user" "$configured" "$tmp" || return 1
@@ -50,7 +55,7 @@ cgw_analyze_session() {
     esac
     return 0
   fi
-  tmp=$(mktemp "${TMPDIR:-/tmp}/cgw-hardcopy.XXXXXX")
+  tmp=$(cgw_capture_file)
   trap 'rm -f -- "$tmp"' RETURN
   cgw_hardcopy "$session" "$user" "$window" "$tmp" || {
     printf 'ERROR\t%s\t\tNONE\n' "$window"

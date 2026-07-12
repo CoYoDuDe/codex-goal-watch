@@ -17,6 +17,7 @@ if [[ $joined == *' -Q windows '* ]]; then
 fi
 if [[ $joined == *' hardcopy '* ]]; then
   file=${args[${#args[@]} - 1]}
+  [[ -z ${MOCK_HARDCOPY_LOG:-} ]] || printf '%s\n' "$file" >>"$MOCK_HARDCOPY_LOG"
   window=0
   for ((i = 0; i < ${#args[@]} - 1; i++)); do [[ ${args[$i]} == -p ]] && window=${args[$((i + 1))]}; done
   fixture=${MOCK_FIXTURE:-normal}

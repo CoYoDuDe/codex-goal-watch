@@ -52,6 +52,13 @@ run_cgw() { run "$REPO/bin/codex-goal-watch" "$@"; }
   [ "$output" -lt 1767226200 ]
 }
 
+@test "screen hardcopies use the shared runtime directory" {
+  export MOCK_HARDCOPY_LOG="$BATS_TEST_TMPDIR/hardcopies"
+  run_cgw add alpha
+  run_cgw inspect alpha
+  grep -q "^$CGW_RUN/" "$MOCK_HARDCOPY_LOG"
+}
+
 @test "explicit European dates are retained and parsed without daily rollover" {
   run bash -c "python3 '$CGW_LIB/detect.py' < '$MOCK_FIXTURES/ready-explicit-date'"
   [ "$status" -eq 0 ]

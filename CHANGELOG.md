@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 - 2026-07-12
+
+- Store GNU-screen hardcopies in the shared runtime directory so systemd's `PrivateTmp` cannot hide them from the screen server.
+
 ## 0.1.2 - 2026-07-12
 
 - Preserve the selected candidate's window through the global scheduler.
