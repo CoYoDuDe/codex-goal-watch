@@ -81,7 +81,7 @@ run_cgw() { run "$REPO/bin/codex-goal-watch" "$@"; }
   run_cgw add alpha auto --priority 100
   run_cgw add beta auto --priority 50
   run_cgw run; [ "$status" -eq 0 ]
-  [ "$(wc -l < "$MOCK_SEND_LOG")" -eq 2 ]
+  [ "$(wc -l < "$MOCK_SEND_LOG")" -eq 1 ]
   grep -q '101.alpha' "$MOCK_SEND_LOG"
   ! grep -q '102.beta' "$MOCK_SEND_LOG"
 }

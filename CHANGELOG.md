@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4 - 2026-07-12
+
+- Send `/goal resume` and Enter together in one GNU-screen input operation, preventing a lost Enter between two separate operations.
+
 ## 0.1.3 - 2026-07-12
 
 - Store GNU-screen hardcopies in the shared runtime directory so systemd's `PrivateTmp` cannot hide them from the screen server.

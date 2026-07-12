@@ -24,6 +24,7 @@ Standard ist immer Fail-closed:
 - Replace-goal-Dialoge werden in v0.1.0 bewusst nur erkannt und blockiert, nie bestätigt.
 - Globales `flock`, Fingerprints, sitzungsspezifische Versuchszähler, erneutes Lesen vor der Eingabe, Nachprüfung und Retry-Fristen verhindern Mehrfachsendungen und Stürme.
 - Ein erfolgreicher `screen`-Tastendruck gilt nicht als erfolgreicher Codex-Resume. Erst eine spätere sichtbare Zustandsänderung bestätigt den Erfolg.
+- `/goal resume` und Enter werden als eine zusammengehörige Eingabe übertragen, damit kein Enter zwischen zwei Screen-Operationen verloren geht.
 
 Die Codex-TUI kann sich ändern. Vor einer Aktivierung sollte immer `inspect` verwendet werden, da das Projekt nur sichtbare Terminalausgabe auswertet.
 

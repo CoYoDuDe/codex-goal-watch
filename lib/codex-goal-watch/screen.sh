@@ -49,9 +49,11 @@ cgw_hardcopy() {
 }
 
 cgw_send_resume() {
-  local session=$1 user=$2 window=$3 mode=$4
+  local session=$1 user=$2 window=$3 mode=$4 payload
   if [[ $mode == TEXT_AND_ENTER ]]; then
-    cgw_screen_as "$user" -S "$session" -p "$window" -X stuff '/goal resume' || return
+    payload=$'/goal resume\r'
+  else
+    payload=$'\r'
   fi
-  cgw_screen_as "$user" -S "$session" -p "$window" -X stuff $'\r'
+  cgw_screen_as "$user" -S "$session" -p "$window" -X stuff "$payload"
 }
