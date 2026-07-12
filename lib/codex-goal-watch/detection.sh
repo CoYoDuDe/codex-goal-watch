@@ -36,7 +36,7 @@ cgw_find_window() {
     ((inspected <= CGW_CONFIG_WINDOW_SCAN_MAX)) || break
     cgw_hardcopy "$session" "$user" "$window" "$tmp" || continue
     cgw_detect_file "$tmp" || continue
-    if [[ ${CGW_DETECT[LIMIT]} == 1 || ${CGW_DETECT[GOAL]} == 1 || ${CGW_DETECT[COMPLETE]} == 1 || ${CGW_DETECT[REPLACE]} == 1 ]]; then
+    if [[ ${CGW_DETECT[LIMIT]} == 1 || ${CGW_DETECT[GOAL]} == 1 || ${CGW_DETECT[COMPLETE]} == 1 || ${CGW_DETECT[REPLACE]} == 1 || ${CGW_DETECT[WORKING]} == 1 ]]; then
       matches+=("$window")
     fi
   done < <(cgw_windows "$session" "$user")
@@ -77,6 +77,13 @@ cgw_analyze_session() {
   fi
   if [[ ${CGW_DETECT[REPLACE]} == 1 ]]; then
     printf 'REPLACE_GOAL_CONFIRMATION_BLOCKED\t%s\t\tNONE\n' "$window"
+    return
+  fi
+  # A current status-bar marker reserves the single global worker slot.  It
+  # never authorizes a keypress, and an actual paused-limit event still takes
+  # precedence so it can be handled after the displayed reset.
+  if [[ ${CGW_DETECT[LIMIT]} != 1 && ${CGW_DETECT[GOAL]} != 1 && ${CGW_DETECT[WORKING]} == 1 ]]; then
+    printf 'WORKING\t%s\t\tNONE\n' "$window"
     return
   fi
   if [[ ${CGW_DETECT[LIMIT]} != 1 || ${CGW_DETECT[GOAL]} != 1 ]]; then

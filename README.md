@@ -9,9 +9,9 @@ Sicheres automatisches Fortsetzen usage-limitierter OpenAI-Codex-CLI-Goals in GN
 
 ## Zweck
 
-Der Watchdog liest die sichtbare Terminalausgabe von GNU screen. Er akzeptiert nur die eindeutige Kombination aus Codex-Usage-Limit, pausiertem Goal und gültiger angezeigter Reset-Zeit. Erst nach Reset und Sicherheitsfrist wird ein Resume versucht – und nur bei sicher erkennbarer Composer-Zeile.
+Der Watchdog liest die sichtbare Terminalausgabe von GNU screen. Er akzeptiert nur die eindeutige Kombination aus Codex-Usage-Limit, pausiertem Goal und gültiger angezeigter Reset-Zeit. Erst nach Reset und Sicherheitsfrist wird ein Resume versucht – und nur bei sicher erkennbarer Composer-Zeile. Er nimmt weder ein festes Fünf-Stunden-Fenster an noch greift er auf Kontodaten zu: maßgeblich ist allein die konkrete Reset-Angabe in der überwachten Codex-TUI.
 
-Mehrere Sitzungen können registriert und aktiviert sein. Version 0.1.0 untersucht alle aktivierten Sitzungen, sendet aber höchstens eine Resume-Aktion pro Timerlauf und setzt danach einen globalen Cooldown. Eine höhere Zahl bei der Priorität gewinnt; bei gleicher Priorität entscheiden Wartezeit und Sitzungsname. Dadurch wird ein gemeinsames Codex-Kontingent nicht unkontrolliert mehrfach genutzt.
+Mehrere Sitzungen können registriert und aktiviert sein. Version 0.1.7 untersucht alle aktivierten Sitzungen, sendet aber höchstens eine Resume-Aktion pro Timerlauf und setzt danach einen globalen Cooldown. Ein aktuell sichtbar arbeitendes Codex-Goal belegt den einzigen globalen Worker-Slot; solange dieser Zustand sichtbar ist, wird keine andere Sitzung automatisch fortgesetzt. Eine höhere Zahl bei der Priorität gewinnt; bei gleicher Priorität entscheiden Wartezeit und Sitzungsname. Dadurch wird ein gemeinsames Codex-Kontingent nicht unkontrolliert mehrfach genutzt.
 
 ## Sicherheitsmodell
 
@@ -112,9 +112,11 @@ MAX_CONCURRENT_SESSIONS=1
 GLOBAL_ACTION_COOLDOWN_SECONDS=120
 ```
 
-`MAX_CONCURRENT_SESSIONS` ist in v0.1.0 absichtlich auf `1` begrenzt. Mehrere Sitzungen dürfen warten, aber pro Lauf kann nur ein Resume gesendet werden; der globale Cooldown schützt das gemeinsame Kontingent zusätzlich.
+`MAX_CONCURRENT_SESSIONS` ist in v0.1.7 absichtlich auf `1` begrenzt. Mehrere Sitzungen dürfen warten, aber pro Lauf kann nur ein Resume gesendet werden. Eine aktuelle Codex-Statuszeile `Working …` oder `Pursuing goal …` reserviert zusätzlich den globalen Worker-Slot; der globale Cooldown schützt das gemeinsame Kontingent zusätzlich. Ist der Arbeitszustand nicht eindeutig sichtbar, wird keine positive Arbeitsannahme getroffen; Resume-Eingaben bleiben ohnehin an die strenge Limit-/Goal-/Reset-/Composer-Prüfung gebunden.
 
 Reset-Zeiten dürfen im 12- oder 24-Stunden-Format erscheinen. Explizite Angaben wie `18.07.2026 08:31`, `2026-07-18 08:31` oder `Jul 18th, 2026 8:31 AM` werden mit der konfigurierten IANA-Zeitzone verarbeitet; bei reinen Uhrzeiten berücksichtigt der Watchdog Tageswechsel und Sommerzeit.
+
+OpenAI kann planabhängige Nutzungslimits, Wochenfenster und optionale Credits ändern. Dieses Projekt umgeht, kauft oder aktiviert keine Credits und versucht keine Kontenprüfung. Sobald Codex für ein pausiertes Goal eine gültige sichtbare Reset-Zeit nennt, verarbeitet der Watchdog diese Angabe unabhängig davon, ob sie zu einem kurzen oder langen Planfenster gehört.
 
 ## Betrieb und Fehlerdiagnose
 

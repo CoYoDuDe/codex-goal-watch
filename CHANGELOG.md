@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.7 - 2026-07-12
+
+- Recognize current Codex `Working` / `Pursuing goal` status-bar markers and reserve the single global worker slot while a session is visibly working.
+- Keep automatic resumes blocked for other registered sessions while that slot is occupied.
+- Clarify that reset handling follows the visible Codex UI and does not assume a fixed five-hour window or manipulate credits.
+
 ## 0.1.6 - 2026-07-12
 
 - Support Codex's English ordinal reset dates such as `Jul 18th, 2026 8:31 AM`.

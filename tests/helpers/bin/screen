@@ -20,7 +20,11 @@ if [[ $joined == *' hardcopy '* ]]; then
   [[ -z ${MOCK_HARDCOPY_LOG:-} ]] || printf '%s\n' "$file" >>"$MOCK_HARDCOPY_LOG"
   window=0
   for ((i = 0; i < ${#args[@]} - 1; i++)); do [[ ${args[$i]} == -p ]] && window=${args[$((i + 1))]}; done
-  fixture=${MOCK_FIXTURE:-normal}
+  session=
+  for ((i = 0; i < ${#args[@]} - 1; i++)); do [[ ${args[$i]} == -S ]] && session=${args[$((i + 1))]}; done
+  session_key=$(printf '%s' "$session" | tr -c '[:alnum:]' '_')
+  session_fixture_var="MOCK_FIXTURE_${session_key}"
+  fixture=${!session_fixture_var:-${MOCK_FIXTURE:-normal}}
   source_file="$MOCK_FIXTURES/${fixture}.${window}"
   [[ -f $source_file ]] || source_file="$MOCK_FIXTURES/$fixture"
   if [[ ${MOCK_HARDCOPY_ASYNC:-0} == 1 ]]; then

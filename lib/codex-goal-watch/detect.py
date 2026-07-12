@@ -19,11 +19,19 @@ lines = [line.rstrip() for line in text.splitlines()]
 visible = lines[-60:]
 tail = visible[-24:]
 joined = "\n".join(tail)
+# A worker marker is deliberately taken only from the very bottom of the
+# terminal.  Older scrollback may contain a previous "Working" status and
+# must not reserve the global worker slot.
+activity_tail = "\n".join(visible[-8:])
 normalized = re.sub(r"\s+", " ", joined)
 limit = bool(re.search(r"(?:you(?:'|’)ve hit your usage limit|usage limit reached)", joined, re.I))
 goal = bool(re.search(r"goal hit usage limits\s*\(/goal resume\)", joined, re.I))
 complete = bool(re.search(r"goal (?:complete|completed)", joined, re.I))
 replace = all(x in joined for x in ("Replace goal?", "1. Replace current goal", "2. Cancel"))
+# These are status-bar forms currently emitted by Codex.  They are not used to
+# authorize input; they only reserve the one global worker slot.  Unknown
+# terminal states remain fail-closed for input.
+working = bool(re.search(r"(?:\bworking\s*\([^\n]*\besc to interrupt\b|\bpursuing goal\s*\()", activity_tail, re.I))
 time_pattern = r"(?:(?:1[0-2]|0?[1-9]):[0-5][0-9]\s*(?:AM|PM|am|pm)|(?:[01]?\d|2[0-3]):[0-5][0-9])"
 date_pattern = r"(?:\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4}|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*\d{4})?)"
 times = re.findall(rf"try again\s+(?:at|on)\s+((?:(?:{date_pattern})\s+(?:at\s+)?)?{time_pattern})", normalized, re.I)
@@ -52,5 +60,6 @@ print(f"LIMIT={int(limit)}")
 print(f"GOAL={int(goal)}")
 print(f"COMPLETE={int(complete)}")
 print(f"REPLACE={int(replace)}")
+print(f"WORKING={int(working)}")
 print(f"RESET_TEXT={reset}")
 print(f"COMPOSER={composer}")

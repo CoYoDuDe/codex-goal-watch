@@ -103,6 +103,17 @@ run_cgw() { run "$REPO/bin/codex-goal-watch" "$@"; }
   ! grep -q '102.beta' "$MOCK_SEND_LOG"
 }
 
+@test "a visible current worker reserves the global slot and blocks another ready session" {
+  export MOCK_FIXTURE_101_alpha=working
+  export MOCK_FIXTURE_102_beta=ready-empty
+  run_cgw add alpha auto --priority 100
+  run_cgw add beta auto --priority 50
+  run_cgw run; [ "$status" -eq 0 ]
+  [ ! -s "$MOCK_SEND_LOG" ]
+  [[ "$output" == *'Global worker slot held by 101.alpha'* ]]
+  run_cgw status alpha; [[ "$output" == *'State: WORKING'* ]]
+}
+
 @test "global cooldown retains other ready candidates" {
   export MOCK_FIXTURE=ready-empty
   run_cgw add alpha; run_cgw add beta

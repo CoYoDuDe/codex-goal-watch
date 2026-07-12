@@ -369,7 +369,7 @@ cgw_process_run_session() {
 }
 
 cgw_cmd_run() {
-  local now file session wait priority full window action fp candidate tmp
+  local now file session wait priority full window action fp candidate tmp worker=
   install -d -m 0700 "$CGW_RUN" "$CGW_STATE"
   exec 9>"$CGW_RUN/watch.lock"
   flock -n 9 || {
@@ -384,6 +384,22 @@ cgw_cmd_run() {
     [[ -f $file ]] || continue
     cgw_process_run_session "$file" "$now"
   done < <(cgw_iter_session_files)
+  # The configured concurrency is one.  A freshly observed current Codex
+  # worker therefore blocks all automatic resumes, even if another session is
+  # ready.  This protects shared account capacity and avoids concurrent goals.
+  while IFS= read -r file; do
+    [[ -f $file ]] || continue
+    cgw_load_session_file "$file" || continue
+    cgw_load_state "${CGW_SESSION[SESSION]}"
+    if [[ ${CGW_STATE_DATA[STATUS]:-} == WORKING ]]; then
+      worker=${CGW_SESSION[SESSION]}
+      break
+    fi
+  done < <(cgw_iter_session_files)
+  if [[ -n $worker ]]; then
+    cgw_info "Global worker slot held by $worker; no resume action taken."
+    return 0
+  fi
   while IFS= read -r file; do
     [[ -f $file ]] || continue
     cgw_load_session_file "$file" || continue
