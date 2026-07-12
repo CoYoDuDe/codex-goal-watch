@@ -76,6 +76,15 @@ run_cgw() { run "$REPO/bin/codex-goal-watch" "$@"; }
   [ "$output" -gt "$CGW_NOW" ]
 }
 
+@test "English ordinal reset dates are retained and parsed" {
+  run bash -c "python3 '$CGW_LIB/detect.py' < '$MOCK_FIXTURES/ready-ordinal-date'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'RESET_TEXT=Jul 18th, 2026 8:31 AM'* ]]
+  run python3 "$CGW_LIB/timeutil.py" 'Jul 18th, 2026 8:31 AM' Europe/Berlin "$CGW_NOW"
+  [ "$status" -eq 0 ]
+  [ "$output" -gt "$CGW_NOW" ]
+}
+
 @test "add enables multiple sessions and disable is session-specific" {
   run_cgw add alpha auto --priority 100; [ "$status" -eq 0 ]
   run_cgw add beta 0 --priority 50; [ "$status" -eq 0 ]

@@ -10,6 +10,7 @@ raw, tz_name, now_raw = sys.argv[1:]
 now = dt.datetime.fromtimestamp(int(now_raw), ZoneInfo(tz_name))
 zone = ZoneInfo(tz_name)
 raw = " ".join(raw.split())
+raw = re.sub(r"(\d{1,2})(?:st|nd|rd|th)(?=,|\s)", r"\1", raw, flags=re.I)
 
 # Explicit dates always win over the daily rollover heuristic. These formats
 # cover Codex's customary English display plus ISO and European server views.

@@ -114,7 +114,7 @@ GLOBAL_ACTION_COOLDOWN_SECONDS=120
 
 `MAX_CONCURRENT_SESSIONS` ist in v0.1.0 absichtlich auf `1` begrenzt. Mehrere Sitzungen dürfen warten, aber pro Lauf kann nur ein Resume gesendet werden; der globale Cooldown schützt das gemeinsame Kontingent zusätzlich.
 
-Reset-Zeiten dürfen im 12- oder 24-Stunden-Format erscheinen. Explizite Angaben wie `18.07.2026 08:31`, `2026-07-18 08:31` oder englische Monatsangaben werden mit der konfigurierten IANA-Zeitzone verarbeitet; bei reinen Uhrzeiten berücksichtigt der Watchdog Tageswechsel und Sommerzeit.
+Reset-Zeiten dürfen im 12- oder 24-Stunden-Format erscheinen. Explizite Angaben wie `18.07.2026 08:31`, `2026-07-18 08:31` oder `Jul 18th, 2026 8:31 AM` werden mit der konfigurierten IANA-Zeitzone verarbeitet; bei reinen Uhrzeiten berücksichtigt der Watchdog Tageswechsel und Sommerzeit.
 
 ## Betrieb und Fehlerdiagnose
 

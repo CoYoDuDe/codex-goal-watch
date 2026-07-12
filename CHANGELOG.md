@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.6 - 2026-07-12
+
+- Support Codex's English ordinal reset dates such as `Jul 18th, 2026 8:31 AM`.
+
 ## 0.1.5 - 2026-07-12
 
 - Remove unsafe function-return cleanup traps that could delete a hardcopy during nested analysis.
